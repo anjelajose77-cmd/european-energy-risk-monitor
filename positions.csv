@@ -1,0 +1,4 @@
+leg,direction,quantity,entry_price
+Gas,long,50000,41.50
+Carbon,short,30000,75.00
+Power,long,40000,90.00
