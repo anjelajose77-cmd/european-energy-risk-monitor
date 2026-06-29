@@ -84,18 +84,15 @@ if __name__ =="__main__":
     for row in book.itertuples():
         print(f"{row.leg:<8} {row.direction:<6} P&L: {row.pnl:>12,.0f}")
     print(f"{'TOTAL':<8} {'':<6} P&L: {book['pnl'].sum():>12,.0f}")
-
-print("\nValue at Risk (1-day, 95%):")
-print(f" Historical Var: {historical_var(history, book):>12,.0f}")
-print(f" Paramtric Var: {parametric_var(history, book):>12,.0f}")
-
-print("\nStress testing & scenario analysis:") 
-for name, shocks in SCENARIOS.items():
+    print("\nValue at Risk (1-day, 95%):")
+    print(f" Historical Var: {historical_var(history, book):>12,.0f}")
+    print(f"  Parametric VaR: {parametric_var(history, book):>12,.0f}")
+    print("\nStress testing & scenario analysis:") 
+    for name, shocks in SCENARIOS.items():
         outcome = stress_test(book, shocks)
         print(f"  {name:<32} P&L: {outcome['TOTAL']:>14,.0f}")
-
-print("\nPosition-limit checks:")
-var_now = historical_var(history, book)
-for a in check_limits(book, var_now):
-        flag = "  *** BREACH ***" if a["status"] == "BREACH" else ""
-        print(f"  {a['item']:<14} {a['exposure']:>12,.0f} / {a['limit']:>12,.0f}  ({a['pct_used']:>5.0f}%){flag}")
+        print("\nPosition-limit checks:")
+        var_now = historical_var(history, book)
+        for a in check_limits(book, var_now):
+            flag = "  *** BREACH ***" if a["status"] == "BREACH" else ""
+            print(f"  {a['item']:<14} {a['exposure']:>12,.0f} / {a['limit']:>12,.0f}  ({a['pct_used']:>5.0f}%){flag}")
