@@ -33,6 +33,45 @@ def parametric_var(history, book, confidence=0.95):
     return round(z* portfolio_std,0)
 
 
+SCENARIOS={"Cold snap + supply disruption": {"Gas": 0.35, "Power": 0.30, "Carbon": 0.05},
+    "Demand destruction (recession)": {"Gas": -0.25, "Power": -0.20, "Carbon": -0.15},
+    "Carbon policy tightening":       {"Gas": 0.05, "Power": 0.10, "Carbon": 0.40},
+    "Mild winter / oversupply":       {"Gas": -0.20, "Power": -0.15, "Carbon": -0.05}}
+
+def stress_test(book,shocks):
+    result={}
+    total=0.0 
+    for row in book.itertuples():
+        shock=shocks.get(row.leg,0.0)
+        leg_pnl=row.signed_qty*row.current_price*shock
+        result[row.leg]=leg_pnl
+        total += leg_pnl
+    result["TOTAL"] = total
+    return result
+
+
+LIMITS={"Gas":2_500_000, "Carbon":2_500_000, "Power":4_000_000, "VaR":300_000,}
+def check_limits(book, var_value):
+    alerts = []
+    for row in book.itertuples():
+        exposure = abs(row.signed_qty * row.current_price)
+        limit = LIMITS.get(row.leg, float("inf"))
+        alerts.append({
+            "item": row.leg,
+            "exposure": exposure,
+            "limit": limit,
+            "pct_used": exposure / limit * 100,
+            "status": "BREACH" if exposure > limit else "ok",
+        })
+    alerts.append({
+        "item": "Portfolio VaR",
+        "exposure": var_value,
+        "limit": LIMITS["VaR"],
+        "pct_used": var_value / LIMITS["VaR"] * 100,
+        "status": "BREACH" if var_value > LIMITS["VaR"] else "ok",})
+    return alerts
+
+
 if __name__ =="__main__":
     history= get_price_history()
     latest={leg: round(history[leg].iloc[-1],2) for leg in history.columns}
@@ -49,3 +88,14 @@ if __name__ =="__main__":
 print("\nValue at Risk (1-day, 95%):")
 print(f" Historical Var: {historical_var(history, book):>12,.0f}")
 print(f" Paramtric Var: {parametric_var(history, book):>12,.0f}")
+
+print("\nStress testing & scenario analysis:") 
+for name, shocks in SCENARIOS.items():
+        outcome = stress_test(book, shocks)
+        print(f"  {name:<32} P&L: {outcome['TOTAL']:>14,.0f}")
+
+print("\nPosition-limit checks:")
+var_now = historical_var(history, book)
+for a in check_limits(book, var_now):
+        flag = "  *** BREACH ***" if a["status"] == "BREACH" else ""
+        print(f"  {a['item']:<14} {a['exposure']:>12,.0f} / {a['limit']:>12,.0f}  ({a['pct_used']:>5.0f}%){flag}")
