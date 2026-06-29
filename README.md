@@ -1,86 +1,78 @@
-# European Cross-Commodity Monitor
-### Cobblestone Energy — Case Study Submission
-**Anjela Jose** | anjelajose22@gmail.com
+# European Cross-Commodity Risk Monitor
 
-**Full version with risk engine (VaR, stress testing, Excel reporting):** https://github.com/anjelajose77-cmd/european-energy-risk-monitor
+A daily market-risk engine for a European energy book spanning **gas (TTF)**, **carbon (EUA)** and **German power**. It pulls live public price data, values a cross-commodity position book, and produces the standard morning risk pack a market-risk desk would circulate — P&L attribution, Value at Risk, stress tests, and position-limit alerts — exported to a structured Excel report with a single command.
 
-## Overview
-An automated daily monitor that converts public European gas and carbon market fundamentals into a trading narrative for the power curve. Runs end-to-end with a single command, producing a branded PDF brief with live metrics, charts, and an AI-generated trading narrative.
+> Built as a learning + portfolio project on free public data. The position book is illustrative (see [Caveats](#caveats)); the risk methodology is the same one used on a live desk.
 
-## What It Does
-1. Pulls 6 live market metrics from public APIs
-2. Generates 3 charts (TTF price history + EU storage deficit vs last year + Generation cost breakdown vs German DA power price)
-3. Calls Groq LLM API to write a 150-200 word trading brief grounded in live data
-4. Outputs a 3-page branded PDF report
+---
 
-## Setup
+## What it does
 
-### 1. Clone the repo
-```powershell
-git clone https://github.com/anjelajose77-cmd/cobblestone-monitor.git
-cd cobblestone-monitor
-```
+Running `python run_risk.py` executes the full daily workflow end to end:
 
-### 2. Create virtual environment
-```powershell
+- **Live cross-commodity data** — pulls daily price history for three independent feeds (TTF gas, EUA carbon, German day-ahead power) and aligns them on a shared calendar.
+- **P&L attribution by leg** — breaks total mark-to-market P&L into each commodity's contribution, so you can see *where* the book's money comes from.
+- **Value at Risk (1-day, 95%)** — computed two independent ways and cross-checked:
+  - *Historical simulation* — replays the real distribution of past daily price moves against today's positions.
+  - *Parametric (variance–covariance)* — `z × portfolio standard deviation`, assuming normally distributed moves.
+- **Stress testing & scenario analysis** — applies four named scenarios (cold snap + supply disruption, demand destruction, carbon-policy tightening, mild winter / oversupply) and reports the P&L impact of each.
+- **Position-limit breach alerts** — checks each leg's exposure against its limit, and total VaR against a VaR limit, flagging any breach.
+- **Structured Excel report** — a formatted, five-tab workbook (`output/risk_report_YYYYMMDD.xlsx`) with breaches highlighted.
+
+---
+
+## Quick start
+
+```bash
+# 1. set up
 python -m venv venv
-venv\Scripts\activate        
-source venv/bin/activate     
+venv\Scripts\activate            # Windows
+# source venv/bin/activate       # Mac/Linux
+pip install -r requirements.txt
+
+# 2. run the full daily risk workflow
+python run_risk.py
 ```
 
-### 3. Install dependencies
-```powershell
-pip install pandas yfinance requests matplotlib fpdf2 groq python-dotenv
-```
+The console prints a summary and saves the Excel report to `output/`.
 
-### 4. Set up API keys
-Create a `.env` file in the root folder:
-GIE_API_KEY=your_gie_key_here
-GROQ_API_KEY=your_groq_key_here
-NEWS_API_KEY=your_newsapi_key_here
+---
 
-**Where to get free API keys:**
-- **GIE** (gas storage + LNG data): Register at agsi.gie.eu — select "Both ALSI and AGSI+" when registering
-- **Groq** (LLM): Free at console.groq.com — no need to buy credits
-- **NewsAPI** (live headlines): Free at newsapi.org
+## How it works
 
-### 5. Run
-```powershell
-python main.py
-```
-## Output
-All files saved to `output/` folder:
-- `cobblestone_monitor_YYYYMMDD.pdf` — full branded report
-- `chart1_ttf_history.png` — TTF 3-month price history
-- `chart2_storage_deficit.png` — EU storage 2026 vs 2025
-- `llm_log.json` — logged prompt and LLM output
+| File | Role |
+|------|------|
+| `positions.csv`   | The position book — one row per leg (direction, quantity, entry price) |
+| `risk_data.py`    | Live data layer: pulls and aligns the three price feeds |
+| `risk_engine.py`  | Risk calculations: P&L attribution, VaR (historical + parametric), stress/scenarios, limit checks |
+| `excel_report.py` | Builds the formatted multi-tab Excel report |
+| `run_risk.py`     | Orchestrator — runs everything and exports the report in one command |
 
-## Monitor Metrics
+Calculation and presentation are deliberately separated: `risk_engine.py` only computes numbers, `excel_report.py` only formats them.
 
-| Metric | Source | Why It Matters |
-|---|---|---|
-| TTF Front-Month | Yahoo Finance | European gas benchmark — sets marginal cost of gas-fired power |
-| EU Gas Storage Fill | GIE AGSI+ API | Physical tightness proxy — currently below 2025 levels |
-| EU ETS Carbon (EUA) | Yahoo Finance | Carbon cost per MWh — structurally supported by 2026 ETS reform |
-| Clean Spark Spread | Derived | Gas plant profitability — positive = gas units dispatched |
-| German Power DA | Energy-Charts API | Spot power benchmark — daily reality check vs forward positions |
-| EU LNG Send-Out | GIE ALSI+ API | Supply flow signal — critical given Hormuz disruption in 2026 |
+---
 
+## Data sources
 
-## Files
-main.py
+| Leg | Source | Detail |
+|-----|--------|--------|
+| Gas — TTF front-month | Yahoo Finance (`yfinance`) | Dutch TTF gas futures (`TTF=F`) |
+| Carbon — EU ETS (EUA) | Yahoo Finance (`yfinance`) | EUA carbon (`CO2.L`) |
+| Power — German day-ahead | [energy-charts.info](https://www.energy-charts.info) API | DE-LU bidding zone, hourly prices averaged to daily |
 
- data_ingestion.py   — pulls all 6 metrics from public APIs
- charts.py           — generates TTF history + storage deficit charts
- llm_brief.py        — fetches live news context + calls Groq LLM
- report.py           — assembles 2-page branded PDF
+All three are free, public, daily feeds. No paid market-data subscription required.
 
+---
 
-## AI / LLM Integration
-The LLM workflow in `llm_brief.py`:
-1. Fetches today's energy headlines via NewsAPI
-2. Injects live metrics + headlines into a structured prompt
-3. Calls Groq API (llama-3.3-70b-versatile) to generate a 150-200 word trading brief
-4. Logs the full prompt and output to `output/llm_log.json`
+## Methodology notes
 
-This eliminates manual morning brief writing — analyst reviews and approves rather than drafts from scratch.
+- **Timezone alignment.** Yahoo Finance stamps each feed in its own timezone, so naively concatenating the series leaves zero overlapping dates. Each timestamp is collapsed to a plain calendar date before aligning, which fixes the join.
+- **Absolute price moves for VaR, not percentage returns.** German power is extremely volatile (day-to-day swings well over 100%). Percentage returns make parametric VaR explode, because a single outlier return dominates the variance. Using absolute price changes (`.diff()`) weighted by position size produces a realistic VaR that reconciles with the historical figure.
+
+---
+
+## Caveats
+
+- The **position book is illustrative** — `positions.csv` and its entry prices are sample values, not real positions. The P&L magnitudes reflect those sample entries; the *methodology* is what matters.
+- Prices are **daily closes / day-ahead**, so VaR is a 1-day measure. Intraday risk is out of scope.
+- VaR's 95% confidence means the ~1-in-20 worst day can exceed it — it is not a worst-case number.
